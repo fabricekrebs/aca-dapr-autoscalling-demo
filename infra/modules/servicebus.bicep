@@ -79,8 +79,14 @@ resource serviceBusPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/priva
   }
 }
 
+// Built-in Azure RBAC role definitions for Service Bus
+var serviceBusDataReceiverRoleId = '4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0'  // Azure Service Bus Data Receiver
+var monitoringReaderRoleId = '43d0d8ad-25c7-4714-9337-8ba259a9fe05'  // Monitoring Reader
+
 output serviceBusNamespaceId string = serviceBusNamespace.id
 output serviceBusNamespaceName string = serviceBusNamespace.name
 output topicName string = topic.name
 output endpoint string = 'https://${serviceBusNamespace.name}.servicebus.windows.net'
 output privateEndpointId string = serviceBusPrivateEndpoint.id
+output serviceBusDataReceiverRoleId string = serviceBusDataReceiverRoleId
+output monitoringReaderRoleId string = monitoringReaderRoleId

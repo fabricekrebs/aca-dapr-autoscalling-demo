@@ -17,9 +17,12 @@ param memory string = '1Gi'
 param tags object = {}
 param environmentVariables array = []
 param serviceBusNamespaceName string
+param serviceBusNamespaceId string
 param serviceBusTopicName string
 param serviceBusSubscriptionName string = 'worker'  // Dapr creates a subscription with the app's daprAppId
 param messageCountTarget int = 100  // Target number of messages per replica
+param serviceBusDataReceiverRoleId string
+param monitoringReaderRoleId string
 
 resource containerApp 'Microsoft.App/containerApps@2025-07-01' = {
   name: appName
@@ -96,7 +99,7 @@ resource containerApp 'Microsoft.App/containerApps@2025-07-01' = {
             name: 'azure-servicebus-topic-rule'
             custom: {
               type: 'azure-servicebus'
-              identity: 'system'
+              identity: managedIdentityId
               metadata: {
                 topicName: serviceBusTopicName
                 subscriptionName: serviceBusSubscriptionName

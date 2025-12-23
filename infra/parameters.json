@@ -11,7 +11,7 @@
     "instance": {
       "value": "01"
     },
-    "apiImageTag": {
+    "dashboardImageTag": {
       "value": "latest"
     },
     "workerImageTag": {

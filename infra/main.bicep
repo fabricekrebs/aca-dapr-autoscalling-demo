@@ -223,7 +223,7 @@ module dashboardApp 'modules/container-app.bicep' = {
       }
       {
         name: 'SERVICE_BUS_NAMESPACE'
-        value: serviceBusNamespaceName
+        value: '${serviceBusNamespaceName}.servicebus.windows.net'
       }
       {
         name: 'MANAGED_IDENTITY_CLIENT_ID'
