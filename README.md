@@ -1,19 +1,19 @@
-# Dapr Demo - Azure Container Apps with Enterprise Security
+# Azure Container Apps Dapr Autoscaling Demo
 
-A demonstration project showcasing **Azure Container Apps** with **Dapr** integration, featuring **autoscaling** capabilities, **Private Endpoints**, **Managed Identity authentication**, and deployed using **Bicep** infrastructure-as-code.
+A demonstration project showcasing **KEDA-based autoscaling** with **Azure Container Apps** and **Dapr**, featuring **Service Bus pub/sub**, **managed identity authentication**, and complete **Bicep infrastructure-as-code**.
 
 ## 🎯 Overview
 
 This project demonstrates:
 
-- **Azure Container Apps** - Serverless container platform with built-in scaling
+- **Azure Container Apps** - Serverless container platform with KEDA autoscaling
 - **Dapr** (Distributed Application Runtime) - Microservices building blocks
-- **Event Grid** - Azure-native pub/sub messaging for Dapr
-- **Autoscaling** - HTTP, CPU, and memory-based scaling rules
+- **Service Bus** - Enterprise messaging for Dapr pub/sub with topic/subscription pattern
+- **KEDA Autoscaling** - Scale from 0 to 30 replicas based on Service Bus queue depth
 - **Private Endpoints** - Secure private connectivity to Azure services
-- **Managed Identity** - Keyless authentication using Azure AD identities
+- **Managed Identity** - Keyless authentication using workload identity
 - **Bicep** - Infrastructure-as-code for Azure resource deployment
-- **Azure Naming Convention** - Standardized resource naming following best practices
+- **Web Dashboard** - Generate up to 10,000 orders and monitor autoscaling in real-time
 
 ## 🔒 Security Features
 
@@ -31,32 +31,34 @@ This project demonstrates:
 
 ## 🏗️ Architecture
 
-The demo consists of two microservices running in a private VNET with secure access to Azure services:
+The demo consists of two microservices:
 
-1. **API Service** (`app-italynorth-daprdemo-api-01`)
-   - REST API for creating and retrieving orders
-   - Publishes events to Event Grid via Dapr and Managed Identity
-   - Exposes health and readiness endpoints
-   - Autoscales based on HTTP requests, CPU, and memory
-   - External ingress for public API access
+1. **Dashboard** (`app-dashboard-daprdemo-01`)
+   - Web UI for generating orders and monitoring metrics
+   - Publishes orders to Service Bus via Dapr
+   - Displays Service Bus queue depth and worker replica count
+   - External ingress for public access
+   - Can generate up to 10,000 orders for load testing
 
-2. **Worker Service** (`app-italynorth-daprdemo-worker-01`)
-   - Subscribes to order events from Event Grid via Dapr
-   - Processes orders and saves state to Azure Storage using Managed Identity
-   - Runs in the background with autoscaling
+2. **Worker Service** (`app-worker-daprdemo-01`)
+   - Subscribes to order events from Service Bus via Dapr
+   - Processes orders and saves state to Azure Storage
+   - **KEDA Autoscaling**: Scales 0-30 replicas based on queue depth
+   - **Scaling Target**: 100 messages per replica
    - Internal only (no external ingress)
 
-### Dapr Components (Managed Identity Authentication)
+### Dapr Components (Managed Identity)
 
-- **Pub/Sub**: Azure Event Grid (`egns-italynorth-daprdemo-01`)
-  - Private Endpoint enabled
-  - Public access disabled
-  - EventGrid Data Sender role assigned to Managed Identity
+- **Pub/Sub**: Azure Service Bus Premium (`sb-italynorth-daprdemo-01`)
+  - Topic: `orders`
+  - Subscription: `worker` (auto-created by Dapr)
+  - Authentication: Workload Identity (system)
+  - RBAC: Azure Service Bus Data Owner
 
 - **State Store**: Azure Blob Storage (`saindaprdemo01`)
-  - Private Endpoint enabled
-  - Public access disabled
-  - Storage Blob Data Contributor role assigned to Managed Identity
+  - Container: `dapr-state`
+  - Authentication: Managed Identity
+  - RBAC: Storage Blob Data Contributor
 
 ### Network Architecture
 
@@ -68,32 +70,34 @@ The demo consists of two microservices running in a private VNET with secure acc
   - `privatelink.azurecr.io`
   - `privatelink.eventgrid.azure.net`
 
-### Autoscaling Rules
+### KEDA Autoscaling Configuration
 
-Both services are configured with:
-- **HTTP Scaling**: Triggers at 10 concurrent requests
-- **CPU Scaling**: Triggers at 70% utilization
-- **Memory Scaling**: Triggers at 80% utilization
-- **Replicas**: 1 min, 10 max
+Worker service autoscaling:
+- **Min Replicas**: 0 (scales to zero when no messages)
+- **Max Replicas**: 30
+- **Trigger**: Azure Service Bus topic subscription
+- **Target**: 100 messages per replica
+- **Polling Interval**: 2 seconds
+- **Cooldown Period**: 10 seconds
+- **Authentication**: Workload Identity (system)
+
+**Example**: 10,000 messages in queue = 100 replicas needed, capped at 30 max
 
 ## 📁 Project Structure
 
 ```
 dapr/
 ├── src/
-│   ├── api/                    # API service (Python/Flask)
+│   ├── dashboard/              # Dashboard UI (Python/Flask)
 │   │   ├── app.py
 │   │   ├── requirements.txt
-│   │   └── Dockerfile
+│   │   ├── Dockerfile
+│   │   └── templates/
+│   │       └── index.html
 │   └── worker/                 # Worker service (Python/Flask)
 │       ├── app.py
 │       ├── requirements.txt
 │       └── Dockerfile
-├── .dapr/
-│   └── components/             # Dapr component definitions
-│       ├── eventgrid-pubsub.yaml
-│       ├── statestore.yaml
-│       └── README.md
 ├── infra/                      # Bicep infrastructure
 │   ├── main.bicep              # Main deployment template
 │   ├── parameters.json         # Deployment parameters
@@ -102,15 +106,16 @@ dapr/
 │       ├── managed-identity.bicep      # User-assigned identity + RBAC
 │       ├── monitoring.bicep
 │       ├── storage.bicep               # Storage with Private Endpoint
-│       ├── eventgrid.bicep             # Event Grid with Private Endpoint
+│       ├── servicebus.bicep            # Service Bus with Private Endpoint
 │       ├── container-registry.bicep    # ACR with Private Endpoint
 │       ├── container-environment.bicep # Container Apps Environment (VNET)
-│       └── container-app.bicep         # Container App with Managed Identity
+│       ├── container-app.bicep         # Dashboard container app
+│       └── container-app-worker.bicep  # Worker with KEDA autoscaling
 ├── scripts/                    # Automation scripts
-│   ├── deploy.sh               # Deploy infrastructure
+│   ├── full-deploy.sh          # Complete deployment (recommended)
+│   ├── deploy.sh               # Deploy infrastructure only
 │   ├── build-images.sh         # Build and push images
-│   ├── local-dev.sh            # Run locally with Dapr
-│   └── test-api.sh             # Test deployed API
+│   └── local-dev.sh            # Run locally with Dapr
 └── docs/                       # Documentation
     ├── naming-convention.md    # Azure naming standards
     ├── architecture.md         # Architecture details
@@ -123,130 +128,130 @@ dapr/
 
 - [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
 - [Docker](https://docs.docker.com/get-docker/)
-- [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/) (for local development)
-- Azure subscription
+- Azure subscription with appropriate permissions
+- Linux/macOS (or WSL on Windows) for running scripts
 
-### 1. Deploy Infrastructure
+### One-Command Deployment
+
+The easiest way to deploy the entire solution:
 
 ```bash
 # Login to Azure
 az login
 
-# Deploy all resources
-./scripts/deploy.sh
+# Run complete deployment
+./scripts/full-deploy.sh
 ```
 
-This creates all Azure resources following the naming convention:
-- Resource Group: `rg-italynorth-daprdemo-01`
-- Container Registry: `acrindaprdemo01`
-- Storage Account: `saindaprdemo01`
-- Event Grid Namespace: `egns-italynorth-daprdemo-01`
-- Container Apps Environment: `env-italynorth-daprdemo-01`
-- API App: `app-italynorth-daprdemo-api-01`
-- Worker App: `app-italynorth-daprdemo-worker-01`
-- Log Analytics: `law-italynorth-daprdemo-01`
-- Application Insights: `ai-italynorth-daprdemo-01`
+This script performs all steps:
+1. ✅ Creates resource group
+2. ✅ Validates Bicep template
+3. ✅ Deploys all infrastructure (10-15 minutes)
+4. ✅ Assigns AcrPull permissions to managed identity
+5. ✅ Builds and pushes container images
+6. ✅ Updates container apps with new images
+7. ✅ Displays dashboard URL and verification steps
 
-### 2. Build and Push Images
+### Manual Deployment Steps
+
+If you prefer to deploy manually:
+
+#### 1. Create Resource Group
 
 ```bash
-# Build Docker images and push to ACR
+az group create --name rg-italynorth-daprdemo-01 --location italynorth
+```
+
+#### 2. Deploy Infrastructure
+
+```bash
+cd infra
+az deployment group create \
+  --name dapr-demo-deployment \
+  --resource-group rg-italynorth-daprdemo-01 \
+  --template-file main.bicep \
+  --parameters parameters.json
+```
+
+#### 3. Assign ACR Permissions
+
+```bash
+# Get identities
+REGISTRY_ID=$(az acr show --name acrindaprdemo01 --query id -o tsv)
+IDENTITY_ID=$(az identity show --name id-italynorth-daprdemo-01 --resource-group rg-italynorth-daprdemo-01 --query principalId -o tsv)
+
+# Assign AcrPull role
+az role assignment create \
+  --assignee $IDENTITY_ID \
+  --role AcrPull \
+  --scope $REGISTRY_ID
+```
+
+#### 4. Build and Push Images
+
+```bash
 ./scripts/build-images.sh
 ```
 
-### 3. Test the API
+#### 5. Access Dashboard
 
 ```bash
-# Run automated tests
-./scripts/test-api.sh
-```
-
-Or test manually:
-
-```bash
-# Get API URL
-API_URL=$(az containerapp show \
-    --name app-italynorth-daprdemo-api-01 \
+# Get dashboard URL
+DASHBOARD_URL=$(az containerapp show \
+    --name app-dashboard-daprdemo-01 \
     --resource-group rg-italynorth-daprdemo-01 \
     --query properties.configuration.ingress.fqdn \
     -o tsv)
 
-# Test health endpoint
-curl https://$API_URL/health
-
-# Create an order
-curl -X POST https://$API_URL/api/orders \
-    -H "Content-Type: application/json" \
-    -d '{
-        "order_id": "order-001",
-        "customer_name": "John Doe",
-        "items": ["Widget A", "Widget B"],
-        "total": 149.99
-    }'
-
-# Retrieve order (after worker processes it)
-curl https://$API_URL/api/orders/order-001
+echo "Dashboard: https://$DASHBOARD_URL"
 ```
+
+### Testing Autoscaling
+
+1. Open the dashboard in your browser
+2. Click "10,000 Orders" button to generate load
+3. Watch worker replicas scale from 0 to 30
+4. Monitor Service Bus queue depth in real-time
+5. Observe scale-down after queue is empty (cooldown period: 10s)
 
 ## 🔧 Local Development
 
-Run the services locally with Dapr:
+To run the services locally with Dapr, you'll need:
+- [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/)
+- Local Azure Service Bus or Service Bus emulator
 
-```bash
-# Start API and Worker with Dapr sidecars
-./scripts/local-dev.sh
-```
-
-This runs:
-- API on `http://localhost:8080` with Dapr on `http://localhost:3500`
-- Worker on `http://localhost:8081` with Dapr on `http://localhost:3501`
+Configure Dapr components for your local environment in `.dapr/components/` directory.
 
 ## 📊 Monitoring
 
-View logs and metrics in Azure Portal:
+View logs and metrics in Azure Portal or query logs with Azure CLI:
 
 ```bash
-# Open Azure Portal
-az containerapp browse --name app-italynorth-daprdemo-api-01 \
-    --resource-group rg-italynorth-daprdemo-01
-```
-
-Or query logs with Azure CLI:
-
-```bash
-# View API logs
+# View Dashboard logs
 az containerapp logs show \
-    --name app-italynorth-daprdemo-api-01 \
+    --name app-dashboard-daprdemo-01 \
     --resource-group rg-italynorth-daprdemo-01 \
     --follow
 
 # View Worker logs
 az containerapp logs show \
-    --name app-italynorth-daprdemo-worker-01 \
+    --name app-worker-daprdemo-01 \
     --resource-group rg-italynorth-daprdemo-01 \
     --follow
-```
 
-## 📈 Testing Autoscaling
-
-Generate load to trigger autoscaling:
-
-```bash
-# Install hey (HTTP load generator)
-# macOS: brew install hey
-# Linux: go install github.com/rakyll/hey@latest
-
-# Generate load
-hey -z 60s -c 50 https://$API_URL/health
-```
-
-Watch replicas scale up:
-
-```bash
+# Check worker replica count
 az containerapp replica list \
-    --name app-italynorth-daprdemo-api-01 \
+    --name app-worker-daprdemo-01 \
     --resource-group rg-italynorth-daprdemo-01 \
     --output table
+
+# Monitor Service Bus queue depth
+az servicebus topic subscription show \
+    --resource-group rg-italynorth-daprdemo-01 \
+    --namespace-name sb-italynorth-daprdemo-01 \
+    --topic-name orders \
+    --name worker \
+    --query messageCount
 ```
 
 ## 🧹 Cleanup
@@ -267,8 +272,10 @@ az group delete --name rg-italynorth-daprdemo-01 --yes --no-wait
 
 - [Azure Container Apps Documentation](https://docs.microsoft.com/en-us/azure/container-apps/)
 - [Dapr Documentation](https://docs.dapr.io/)
-- [Azure Event Grid Documentation](https://docs.microsoft.com/en-us/azure/event-grid/)
+- [KEDA Scalers](https://keda.sh/docs/latest/scalers/azure-service-bus/)
+- [Azure Service Bus Documentation](https://docs.microsoft.com/en-us/azure/service-bus-messaging/)
 - [Bicep Documentation](https://docs.microsoft.com/en-us/azure/azure-resource-manager/bicep/)
+- [Managed Identity Documentation](https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/)
 
 ## 📝 License
 
