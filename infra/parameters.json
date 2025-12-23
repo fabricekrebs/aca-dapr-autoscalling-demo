@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "italynorth"
+    },
+    "appName": {
+      "value": "daprdemo"
+    },
+    "instance": {
+      "value": "01"
+    },
+    "apiImageTag": {
+      "value": "latest"
+    },
+    "workerImageTag": {
+      "value": "latest"
+    },
+    "minReplicas": {
+      "value": 1
+    },
+    "maxReplicas": {
+      "value": 10
+    },
+    "tags": {
+      "value": {
+        "Application": "DaprDemo",
+        "Environment": "Demo",
+        "ManagedBy": "Bicep",
+        "Project": "DaprDemo"
+      }
+    }
+  }
+}

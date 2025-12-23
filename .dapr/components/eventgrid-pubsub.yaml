@@ -1,0 +1,17 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: eventgrid-pubsub
+spec:
+  type: pubsub.azure.eventgrid
+  version: v1
+  metadata:
+  # Using Azure Managed Identity for authentication
+  - name: endpoint
+    value: "" # Will be set by environment variable in Container Apps
+  - name: azureClientId
+    value: "" # Managed Identity Client ID - set by Container Apps
+  # No accessKey needed - using Managed Identity
+scopes:
+- api
+- worker
