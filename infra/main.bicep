@@ -41,7 +41,8 @@ var storageAccountName = 'sa${locationAbbr}${appName}${instance}' // saindaprdem
 var containerRegistryName = 'acr${locationAbbr}${appName}${instance}' // acrindaprdemo01
 var serviceBusNamespaceName = 'sb-${location}-${appName}-${instance}' // sb-italynorth-daprdemo-01
 var environmentName = 'env-${location}-${appName}-${instance}' // env-italynorth-daprdemo-01
-var workerAppName = 'app-${location}-${appName}-worker-${instance}' // app-italynorth-daprdemo-worker-01
+var workerAppName = 'app-worker-${appName}-${instance}' // app-worker-daprdemo-01
+var dashboardAppName = 'app-dashboard-${appName}-${instance}' // app-dashboard-daprdemo-01
 var logAnalyticsName = 'law-${location}-${appName}-${instance}' // law-italynorth-daprdemo-01
 var appInsightsName = 'ai-${location}-${appName}-${instance}' // ai-italynorth-daprdemo-01
 
@@ -49,7 +50,7 @@ var appInsightsName = 'ai-${location}-${appName}-${instance}' // ai-italynorth-d
 var locationAbbr = location == 'italynorth' ? 'in' : location == 'westeurope' ? 'we' : location == 'northeurope' ? 'ne' : 'unk'
 
 // Resource Group
-resource resourceGroup 'Microsoft.Resources/resourceGroups@2023-07-01' = {
+resource resourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: resourceGroupName
   location: location
   tags: tags
@@ -150,9 +151,7 @@ module containerEnvironment 'modules/container-environment.bicep' = {
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     appInsightsInstrumentationKey: monitoring.outputs.appInsightsInstrumentationKey
     storageAccountName: storageAccountName
-    serviceBusEndpoint: serviceBus.outputs.endpoint
     serviceBusNamespaceName: serviceBusNamespaceName
-    topicName: 'orders'
     managedIdentityClientId: managedIdentity.outputs.clientId
     tags: tags
   }
@@ -170,7 +169,6 @@ module workerApp 'modules/container-app-worker.bicep' = {
     containerPort: 8081
     containerRegistryServer: containerRegistry.outputs.registryLoginServer
     managedIdentityId: managedIdentity.outputs.identityId
-    managedIdentityClientId: managedIdentity.outputs.clientId
     daprAppId: 'worker'
     daprAppPort: 8081
     minReplicas: 0
@@ -195,6 +193,50 @@ module workerApp 'modules/container-app-worker.bicep' = {
   }
 }
 
+// Dashboard Container App with Managed Identity and HTTP Scaling
+module dashboardApp 'modules/container-app.bicep' = {
+  scope: resourceGroup
+  name: 'dashboard-app-deployment'
+  params: {
+    location: location
+    appName: dashboardAppName
+    environmentId: containerEnvironment.outputs.environmentId
+    containerImage: '${containerRegistry.outputs.registryLoginServer}/dashboard:${dashboardImageTag}'
+    containerPort: 8082
+    containerRegistryServer: containerRegistry.outputs.registryLoginServer
+    managedIdentityId: managedIdentity.outputs.identityId
+    daprAppId: 'dashboard'
+    daprAppPort: 8082
+    minReplicas: minReplicas
+    maxReplicas: maxReplicas
+    cpu: '0.5'
+    memory: '1Gi'
+    tags: tags
+    environmentVariables: [
+      {
+        name: 'PORT'
+        value: '8082'
+      }
+      {
+        name: 'DAPR_HTTP_PORT'
+        value: '3500'
+      }
+      {
+        name: 'SERVICE_BUS_NAMESPACE'
+        value: serviceBusNamespaceName
+      }
+      {
+        name: 'MANAGED_IDENTITY_CLIENT_ID'
+        value: managedIdentity.outputs.clientId
+      }
+      {
+        name: 'WORKER_APP_NAME'
+        value: workerAppName
+      }
+    ]
+  }
+}
+
 // Outputs
 output resourceGroupName string = resourceGroup.name
 output vnetName string = network.outputs.vnetName
@@ -205,5 +247,7 @@ output containerRegistryLoginServer string = containerRegistry.outputs.registryL
 output serviceBusNamespaceName string = serviceBus.outputs.serviceBusNamespaceName
 output environmentName string = containerEnvironment.outputs.environmentName
 output workerAppName string = workerApp.outputs.containerAppName
+output dashboardAppName string = dashboardApp.outputs.containerAppName
+output dashboardAppFQDN string = dashboardApp.outputs.containerAppFQDN
 output logAnalyticsWorkspaceName string = logAnalyticsName
 output appInsightsName string = appInsightsName

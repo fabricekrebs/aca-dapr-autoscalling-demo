@@ -1,540 +1,284 @@
-# Architecture Overview
+# Architecture Documentation
 
-This document describes the architecture of the Dapr Demo application running on Azure Container Apps with enterprise-grade security using Private Endpoints and Managed Identity.
+## System Architecture
 
-## High-Level Architecture
+This document describes the architecture of the Dapr-based autoscaling demo on Azure Container Apps.
 
+## High-Level Architecture Diagram
+
+```mermaid
+graph TB
+    subgraph Internet
+        User[User Browser]
+    end
+
+    subgraph "Azure Subscription"
+        subgraph "Virtual Network (10.12.2.0/24)"
+            subgraph "Container Apps Subnet (10.12.2.0/25)"
+                subgraph "Container Apps Environment"
+                    Dashboard[Dashboard App<br/>app-dashboard-daprdemo-01<br/>Port: 8082]
+                    Worker[Worker App<br/>app-worker-daprdemo-01<br/>Port: 8081<br/>Min: 0, Max: 30]
+                    
+                    subgraph "Dapr Sidecars"
+                        DaprDash[Dapr Sidecar<br/>:3500]
+                        DaprWork[Dapr Sidecar<br/>:3500]
+                    end
+                end
+            end
+            
+            subgraph "Private Endpoints Subnet (10.12.2.128/25)"
+                PE_ACR[ACR PE]
+                PE_SB[Service Bus PE]
+                PE_Storage[Storage PE]
+            end
+        end
+
+        subgraph "Azure Services"
+            ACR[Container Registry<br/>acrindaprdemo01]
+            SB[Service Bus Premium<br/>sb-italynorth-daprdemo-01<br/>Topic: orders]
+            Storage[Storage Account<br/>saindaprdemo01<br/>Container: dapr-state]
+            Identity[Managed Identity<br/>id-italynorth-daprdemo-01]
+        end
+
+        subgraph "Monitoring"
+            LAW[Log Analytics<br/>law-italynorth-daprdemo-01]
+            AppInsights[Application Insights<br/>ai-italynorth-daprdemo-01]
+        end
+
+        subgraph "KEDA Scaler"
+            KEDA[KEDA<br/>Monitors Service Bus<br/>Target: 5 msg/replica]
+        end
+    end
+
+    User -->|HTTPS| Dashboard
+    Dashboard -->|Dapr Pub/Sub| DaprDash
+    DaprDash -->|Publish Orders| SB
+    Worker -->|Dapr Pub/Sub| DaprWork
+    DaprWork -->|Subscribe Orders| SB
+    Worker -->|Dapr State Store| DaprWork
+    DaprWork -->|Save State| Storage
+    
+    Dashboard -.->|Pull Image| ACR
+    Worker -.->|Pull Image| ACR
+    
+    Dashboard -.->|Uses| Identity
+    Worker -.->|Uses| Identity
+    
+    KEDA -->|Monitor Queue Depth| SB
+    KEDA -->|Scale Replicas| Worker
+    
+    Dashboard -.->|Logs/Metrics| AppInsights
+    Worker -.->|Logs/Metrics| AppInsights
+    AppInsights -->|Store| LAW
+    
+    ACR -.->|Private Link| PE_ACR
+    SB -.->|Private Link| PE_SB
+    Storage -.->|Private Link| PE_Storage
+
+    classDef containerApp fill:#0078d4,stroke:#003d66,color:#fff
+    classDef dapr fill:#0d2192,stroke:#000,color:#fff
+    classDef azure fill:#50e6ff,stroke:#0078d4,color:#000
+    classDef pe fill:#f0f0f0,stroke:#666,color:#000
+    classDef monitor fill:#ffb900,stroke:#ff8c00,color:#000
+    
+    class Dashboard,Worker containerApp
+    class DaprDash,DaprWork dapr
+    class ACR,SB,Storage,Identity azure
+    class PE_ACR,PE_SB,PE_Storage pe
+    class LAW,AppInsights,KEDA monitor
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                     Virtual Network (vnet-italynorth-daprdemo-01)        │
-│                                 10.0.0.0/16                              │
-│                                                                           │
-│  ┌────────────────────────────────────────────────────────────────────┐  │
-│  │      Container Apps Subnet (snet-italynorth-daprdemo-apps-01)      │  │
-│  │                         10.0.0.0/23                                │  │
-│  │                                                                    │  │
-│  │  ┌─────────────────────────────────────────────────────────────┐  │  │
-│  │  │       Container Apps Environment (env-*)                    │  │  │
-│  │  │                                                             │  │  │
-│  │  │  ┌──────────────────┐        ┌──────────────────┐         │  │  │
-│  │  │  │  API App         │        │  Worker App      │         │  │  │
-│  │  │  │  + Dapr :3500    │        │  + Dapr :3501    │         │  │  │
-│  │  │  │  + Managed ID    │        │  + Managed ID    │         │  │  │
-│  │  │  └────────┬─────────┘        └────────┬─────────┘         │  │  │
-│  │  └───────────┼──────────────────────────┼────────────────────┘  │  │
-│  └──────────────┼──────────────────────────┼───────────────────────┘  │
-│                 │                          │                           │
-│  ┌──────────────┼──────────────────────────┼───────────────────────┐  │
-│  │  Private Endpoints Subnet (snet-italynorth-daprdemo-pe-01)      │  │
-│  │                     10.0.2.0/24                                 │  │
-│  │                                                                 │  │
-│  │    ┌────────────┐     ┌────────────┐     ┌────────────┐      │  │
-│  │    │ Blob PE    │     │ Event Grid │     │   ACR PE   │      │  │
-│  │    │ (Storage)  │     │    PE      │     │            │      │  │
-│  │    └─────┬──────┘     └─────┬──────┘     └─────┬──────┘      │  │
-│  └──────────┼──────────────────┼──────────────────┼─────────────┘  │
-│             │                  │                  │                  │
-└─────────────┼──────────────────┼──────────────────┼──────────────────┘
-              │ Private          │ Private          │ Private
-              │ Connection       │ Connection       │ Connection
-              │                  │                  │
-     ┌────────▼────────┐  ┌─────▼──────┐  ┌────────▼────────┐
-     │  Blob Storage   │  │ Event Grid │  │ Container Reg.  │
-     │  (State Store)  │  │  (Pub/Sub) │  │  (Images)       │
-     │  Public: OFF    │  │ Public: OFF│  │  Public: OFF    │
-     └─────────────────┘  └────────────┘  └─────────────────┘
 
-   Authentication: Managed Identity (id-italynorth-daprdemo-01)
-   - Storage Blob Data Contributor (State Store)
-   - EventGrid Data Sender (Pub/Sub)
-   - AcrPull (Container Images)
-```
+## Component Details
 
-## Components
+### Container Apps
 
-### 1. API Service
+#### Dashboard App
+- **Name**: `app-dashboard-daprdemo-01`
+- **Image**: `acrindaprdemo01.azurecr.io/dashboard:latest`
+- **Port**: 8082
+- **Dapr App ID**: `dashboard`
+- **Ingress**: External (HTTPS)
+- **Scaling**: HTTP-based (1-3 replicas)
+- **Function**: 
+  - Web UI for generating orders
+  - Publishes orders to Service Bus via Dapr
+  - Displays metrics (queue depth, worker replicas)
 
-**Purpose**: REST API for order management
+#### Worker App
+- **Name**: `app-worker-daprdemo-01`
+- **Image**: `acrindaprdemo01.azurecr.io/worker:latest`
+- **Port**: 8081
+- **Dapr App ID**: `worker`
+- **Ingress**: None (internal only)
+- **Scaling**: KEDA-based (0-30 replicas)
+- **Scaling Trigger**: Service Bus topic subscription
+- **Target**: 5 messages per replica
+- **Function**:
+  - Subscribes to orders from Service Bus via Dapr
+  - Processes orders
+  - Saves state to Azure Storage via Dapr
 
-**Container App**: `app-italynorth-daprdemo-api-01`
+### Dapr Components
 
-**Endpoints**:
-- `GET /` - Service information
-- `GET /health` - Health check (liveness probe)
-- `GET /ready` - Readiness check (readiness probe)
-- `POST /api/orders` - Create new order and publish event
-- `GET /api/orders/{order_id}` - Retrieve order from state store
+#### Pub/Sub Component
+- **Type**: `pubsub.azure.servicebus.topics`
+- **Name**: `pubsub`
+- **Backend**: Azure Service Bus Premium
+- **Authentication**: Managed Identity (Workload Identity)
+- **Topic**: `orders`
+- **Subscription**: `worker` (auto-created by Dapr)
+- **Scopes**: `dashboard`, `worker`
 
-**Dapr Integration**:
-- **App ID**: `api`
-- **App Port**: `8080`
-- **Dapr Port**: `3500`
-- **Publishes to**: Event Grid topic `orders` via `eventgrid-pubsub` component
-- **Reads from**: State store via `statestore` component
+#### State Store Component
+- **Type**: `state.azure.blobstorage`
+- **Name**: `statestore`
+- **Backend**: Azure Storage Account (Blob)
+- **Authentication**: Managed Identity
+- **Container**: `dapr-state`
+- **Scopes**: `worker`
 
-**Autoscaling**:
-- Min replicas: 1
-- Max replicas: 10
-- Triggers:
-  - HTTP: 10 concurrent requests
-  - CPU: 70% utilization
-  - Memory: 80% utilization
+### KEDA Autoscaling
 
-### 2. Worker Service
-
-**Purpose**: Background processor for order events
-
-**Container App**: `app-italynorth-daprdemo-worker-01`
-
-**Endpoints**:
-- `GET /` - Service information
-- `GET /health` - Health check (liveness probe)
-- `GET /ready` - Readiness check (readiness probe)
-- `GET /dapr/subscribe` - Dapr subscription endpoint
-- `POST /orders` - Event handler for order events
-
-**Dapr Integration**:
-- **App ID**: `worker`
-- **App Port**: `8081`
-- **Dapr Port**: `3501`
-- **Subscribes to**: Event Grid topic `orders` via `eventgrid-pubsub` component
-- **Writes to**: State store via `statestore` component
-
-**Autoscaling**:
-- Min replicas: 1
-- Max replicas: 10
-- Triggers:
-  - HTTP: 10 concurrent requests
-  - CPU: 70% utilization
-  - Memory: 80% utilization
-
-## Dapr Components
-
-### Event Grid Pub/Sub Component
-
-**Name**: `eventgrid-pubsub`
-
-**Type**: `pubsub.azure.eventgrid`
-
-**Authentication**: Managed Identity (no access keys)
-
-**Configuration**:
+#### Configuration
 ```yaml
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: eventgrid-pubsub
-spec:
-  type: pubsub.azure.eventgrid
-  version: v1
-  metadata:
-  - name: endpoint
-    value: <Event Grid namespace endpoint>
-  - name: azureClientId
-    value: <Managed Identity Client ID>
-  - name: topicEndpoint
-    value: <Topic endpoint>
-scopes:
-- api
-- worker
+Scaler: azure-servicebus
+Type: Topic Subscription
+Topic: orders
+Subscription: worker
+Target: 5 messages per replica
+Min Replicas: 0 (scale to zero)
+Max Replicas: 30
+Polling Interval: 2 seconds
+Cooldown Period: 10 seconds
+Authentication: System Identity
 ```
 
-**Azure Resource**: `egns-italynorth-daprdemo-01`
+#### Scaling Behavior
+- **Scale Up**: When messages in queue > 5 × current replicas
+- **Scale Down**: After cooldown period when queue depth decreases
+- **Scale to Zero**: When no messages for cooldown period
 
-**Topic**: `orders`
+### Network Architecture
 
-**Security**:
-- Private Endpoint enabled
-- Public network access disabled
-- Managed Identity authentication via EventGrid Data Sender role
+#### Virtual Network
+- **Name**: `vnet-italynorth-daprdemo-01`
+- **Address Space**: `10.12.2.0/24` (256 addresses)
 
-**Features**:
-- CloudEvents 1.0 schema
-- 1-day event retention
-- Dead-letter queue for failed deliveries
-- Max 10 delivery attempts
+#### Subnets
+1. **Container Apps Subnet**
+   - **CIDR**: `10.12.2.0/25` (128 addresses)
+   - **Purpose**: Container Apps infrastructure
+   - **Delegation**: `Microsoft.App/environments`
 
-### State Store Component
+2. **Private Endpoints Subnet**
+   - **CIDR**: `10.12.2.128/25` (128 addresses)
+   - **Purpose**: Private endpoints for Azure services
 
-**Name**: `statestore`
+#### Private DNS Zones
+- `privatelink.azurecr.io` - Container Registry
+- `privatelink.blob.core.windows.net` - Storage Account
+- `privatelink.servicebus.windows.net` - Service Bus
+- `privatelink.eventgrid.azure.net` - Event Grid (reserved)
 
-**Type**: `state.azure.blobstorage`
+### Security & Identity
 
-**Authentication**: Managed Identity (no account keys)
+#### Managed Identity
+- **Name**: `id-italynorth-daprdemo-01`
+- **Type**: User-Assigned Managed Identity
+- **Used By**: Dashboard App, Worker App
 
-**Configuration**:
-```yaml
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: statestore
-spec:
-  type: state.azure.blobstorage
-  version: v1
-  metadata:
-  - name: accountName
-    value: saindaprdemo01
-  - name: azureClientId
-    value: <Managed Identity Client ID>
-  - name: containerName
-    value: dapr-state
-scopes:
-- api
-- worker
-```
+#### RBAC Role Assignments
+- **Storage Blob Data Contributor** → Storage Account
+- **Azure Service Bus Data Owner** → Service Bus Namespace
+- **AcrPull** → Container Registry
 
-**Azure Resource**: `saindaprdemo01`
+### Monitoring
 
-**Container**: `dapr-state`
+#### Log Analytics Workspace
+- **Name**: `law-italynorth-daprdemo-01`
+- **Purpose**: Centralized logging for all Container Apps
+- **Retention**: 30 days (default)
 
-**Security**:
-- Private Endpoint enabled
-- Public network access disabled
-- Managed Identity authentication via Storage Blob Data Contributor role
+#### Application Insights
+- **Name**: `ai-italynorth-daprdemo-01`
+- **Purpose**: Application monitoring, metrics, traces
+- **Integration**: Dapr telemetry enabled
 
-**Features**:
-- Blob storage for state persistence
-- Key-value access pattern
-- TTL support
-- Encryption at rest
+## Data Flow
 
-## Communication Flow
-
-### Order Creation Flow (with Private Endpoints)
+### Order Creation Flow
 
 ```
-1. Client sends POST request to API (via public ingress)
-   ↓
-2. API validates order data
-   ↓
-3. API calls Dapr sidecar to publish event
-   ↓
-4. Dapr authenticates using Managed Identity (EventGrid Data Sender)
-   ↓
-5. Dapr publishes event to Event Grid via Private Endpoint
-   ↓
-6. Event Grid delivers event to Worker subscription (within VNET)
-   ↓
-7. Dapr delivers event to Worker app
-   ↓
-8. Worker processes order
-   ↓
-9. Worker calls Dapr sidecar to save state
-   ↓
-10. Dapr authenticates using Managed Identity (Storage Blob Data Contributor)
-    ↓
-11. Dapr saves state to Blob Storage via Private Endpoint
-    ↓
-12. Worker returns success to Dapr
-    ↓
-13. Event Grid marks event as delivered
+1. User clicks "10,000 Orders" in Dashboard UI
+2. Dashboard app generates 10,000 order JSON objects
+3. Dashboard publishes each order to Dapr pubsub (localhost:3500)
+4. Dapr sidecar sends orders to Service Bus topic "orders"
+5. Service Bus queues orders in "worker" subscription
 ```
 
-### Order Retrieval Flow (with Private Endpoints)
+### Order Processing Flow
 
 ```
-1. Client sends GET request to API for order (via public ingress)
-   ↓
-2. API calls Dapr sidecar to get state
-   ↓
-3. Dapr authenticates using Managed Identity (Storage Blob Data Contributor)
-   ↓
-4. Dapr retrieves state from Blob Storage via Private Endpoint
-   ↓
-5. Dapr returns state to API
-   ↓
-6. API returns order data to client
+1. KEDA monitors Service Bus subscription "worker"
+2. KEDA scales Worker replicas based on queue depth
+3. Each Worker instance subscribes via Dapr
+4. Dapr delivers orders to Worker app (localhost:8081)
+5. Worker processes order (simulated delay)
+6. Worker saves state to Dapr statestore
+7. Dapr sidecar persists state to Azure Blob Storage
+8. Order is marked complete and removed from queue
 ```
 
-### Private Endpoint DNS Resolution
+### Scaling Behavior Example
 
-All Azure services are accessed via Private Endpoints with private DNS zones:
+```
+Queue Depth: 150 messages
+Target: 5 messages/replica
+Desired Replicas: 150 / 5 = 30 replicas
+Actual Replicas: 30 (capped at max)
 
-1. **Blob Storage**: `privatelink.blob.core.windows.net`
-   - `saindaprdemo01.blob.core.windows.net` → `10.0.2.x` (private IP)
+Queue Depth: 25 messages
+Target: 5 messages/replica
+Desired Replicas: 25 / 5 = 5 replicas
+Actual Replicas: 5
 
-2. **Event Grid**: `privatelink.eventgrid.azure.net`
-   - `egns-italynorth-daprdemo-01.*.eventgrid.azure.net` → `10.0.2.y` (private IP)
-
-3. **Container Registry**: `privatelink.azurecr.io`
-   - `acrindaprdemo01.azurecr.io` → `10.0.2.z` (private IP)
-
-## Container Apps Environment
-
-**Name**: `env-italynorth-daprdemo-01`
-
-**Network Configuration**:
-- **VNET Integration**: Connected to `vnet-italynorth-daprdemo-01`
-- **Subnet**: `snet-italynorth-daprdemo-apps-01` (10.0.0.0/23)
-- **Internal only**: No (external ingress enabled for API)
-
-**Features**:
-- **Dapr enabled** - Automatic sidecar injection
-- **Log Analytics integration** - Centralized logging
-- **Application Insights** - Distributed tracing
-- **Managed Identity** - Assigned to all container apps
-- **Ingress** - HTTP/HTTPS traffic management
-- **Scaling** - KEDA-based autoscaling
-
-**Dapr Configuration**:
-- Dapr version: Latest stable
-- Metrics enabled: Yes
-- Tracing enabled: Yes (Application Insights)
-- mTLS enabled: Yes (between sidecars)
-- API logging: Enabled
-- Component secrets: Managed Identity authentication (no keys)
-
-## Autoscaling Details
-
-### HTTP-Based Scaling
-
-```yaml
-rules:
-  - name: http-scaling
-    http:
-      metadata:
-        concurrentRequests: '10'
+Queue Depth: 0 messages
+Wait: 10 seconds cooldown
+Actual Replicas: 0 (scale to zero)
 ```
 
-**Behavior**:
-- Scales up when concurrent requests exceed 10 per replica
-- Scales down when requests drop below threshold
-- Fast response to traffic spikes
+## Infrastructure as Code
 
-### CPU-Based Scaling
+All infrastructure is defined in Bicep templates under `/infra`:
 
-```yaml
-rules:
-  - name: cpu-scaling
-    custom:
-      type: cpu
-      metadata:
-        type: Utilization
-        value: '70'
-```
+- **main.bicep** - Main orchestration template
+- **modules/network.bicep** - VNet, subnets, private DNS zones
+- **modules/storage.bicep** - Storage account with private endpoint
+- **modules/servicebus.bicep** - Service Bus with private endpoint
+- **modules/container-registry.bicep** - ACR with private endpoint
+- **modules/managed-identity.bicep** - Managed identity with RBAC
+- **modules/monitoring.bicep** - Log Analytics and App Insights
+- **modules/container-environment.bicep** - Container Apps Environment + Dapr components
+- **modules/container-app.bicep** - Dashboard app with HTTP scaling
+- **modules/container-app-worker.bicep** - Worker app with KEDA scaling
 
-**Behavior**:
-- Scales up when CPU utilization exceeds 70%
-- Scales down when CPU drops below threshold
-- Protects against CPU exhaustion
+## API Versions (as of December 2025)
 
-### Memory-Based Scaling
+- Container Apps: `2025-07-01`
+- Container Apps Environments: `2025-07-01`
+- Virtual Networks: `2025-01-01`
+- Private Endpoints: `2025-01-01`
+- Private DNS Zones: `2024-06-01`
+- Storage Accounts: `2025-06-01`
+- Service Bus: `2024-01-01`
+- Container Registry: `2025-11-01`
+- Managed Identity: `2024-11-30`
+- Role Assignments: `2022-04-01`
+- Log Analytics: `2025-07-01`
+- Application Insights: `2020-02-02`
+- Event Grid: `2025-02-15`
+- Resource Groups: `2024-03-01`
 
-```yaml
-rules:
-  - name: memory-scaling
-    custom:
-      type: memory
-      metadata:
-        type: Utilization
-        value: '80'
-```
+## Deployment
 
-**Behavior**:
-- Scales up when memory utilization exceeds 80%
-- Scales down when memory drops below threshold
-- Prevents out-of-memory errors
-
-### Scaling Characteristics
-
-- **Scale-up**: Fast (within seconds)
-- **Scale-down**: Gradual (configurable cooldown period)
-- **Min replicas**: 1 (always available)
-- **Max replicas**: 10 (cost control)
-- **Target**: Maintain performance under load
-
-## Monitoring & Observability
-
-### Application Insights
-
-**Name**: `ai-italynorth-daprdemo-01`
-
-**Collects**:
-- HTTP request traces
-- Dependency calls (Dapr, Event Grid, Storage)
-- Exceptions and errors
-- Custom events and metrics
-- Performance counters
-
-**Features**:
-- Distributed tracing across services
-- Application map visualization
-- Real-time metrics
-- Failure analysis
-- Performance profiling
-
-### Log Analytics Workspace
-
-**Name**: `law-italynorth-daprdemo-01`
-
-**Collects**:
-- Container logs (stdout/stderr)
-- Dapr sidecar logs
-- System logs
-- Metrics (CPU, memory, network)
-
-**Retention**: 30 days
-
-**Query Language**: KQL (Kusto Query Language)
-
-### Key Metrics to Monitor
-
-1. **HTTP Metrics**:
-   - Request rate
-   - Response time (p50, p95, p99)
-   - Error rate
-   - Status code distribution
-
-2. **Autoscaling Metrics**:
-   - Current replica count
-   - Scale events
-   - CPU/Memory utilization
-   - Concurrent requests
-
-3. **Dapr Metrics**:
-   - Pub/sub publish latency
-   - State store operations
-   - Component failures
-   - Sidecar health
-
-4. **Event Grid Metrics**:
-   - Events published
-   - Events delivered
-   - Delivery failures
-   - Delivery latency
-
-## Security
-
-### Network Security
-
-- **VNET Integration** - All resources deployed within private virtual network
-- **Private Endpoints** - All Azure services (Storage, Event Grid, ACR) accessible only via private IPs
-- **Private DNS Zones** - Automatic DNS resolution to private endpoints
-- **Public Access Disabled** - No internet-facing endpoints for backend services
-- **HTTPS only** - All external traffic encrypted
-- **Service-to-service mTLS** - Dapr automatically secures inter-service communication
-- **Network Isolation** - Separate subnets for Container Apps and Private Endpoints
-
-### Authentication & Authorization
-
-- **Managed Identity** - User-assigned identity for all container apps
-- **RBAC Roles**:
-  - Storage Blob Data Contributor (for state store)
-  - EventGrid Data Sender (for pub/sub)
-  - AcrPull (for container image pulls)
-- **No Access Keys** - Zero reliance on storage account keys or Event Grid access keys
-- **Container Registry** - Admin user disabled, authentication via Managed Identity
-
-### Secrets Management
-
-- **No Secrets Required** - Managed Identity eliminates need for credentials
-- **Container Apps environment** - Dapr components configured with Managed Identity client ID
-- **Key Vault integration** - Can be added for application-specific secrets if needed
-
-### Security Benefits
-
-1. **Zero Trust Architecture** - No standing credentials to rotate or leak
-2. **Least Privilege Access** - RBAC grants only required permissions
-3. **Network Isolation** - Resources not accessible from internet
-4. **Audit Trail** - All Managed Identity operations logged in Azure Activity Log
-5. **Compliance** - Meets enterprise security requirements for private networking
-
-## Deployment Model
-
-### Infrastructure as Code
-
-- **Bicep templates** - Declarative infrastructure
-- **Modular design** - Reusable modules
-- **Parameterized** - Environment-agnostic
-- **Version controlled** - Git repository
-
-### Container Images
-
-- **Registry**: `acrindaprdemo01` (Private Endpoint enabled)
-- **API image**: `acrindaprdemo01.azurecr.io/api:latest`
-- **Worker image**: `acrindaprdemo01.azurecr.io/worker:latest`
-- **Multi-stage builds** - Optimized image size
-- **Non-root user** - Enhanced security
-- **Authentication** - Managed Identity (AcrPull role)
-
-### Deployment Process
-
-1. **Build images** - Docker build
-2. **Push to ACR** - Azure Container Registry
-3. **Deploy infrastructure** - Bicep deployment
-4. **Update revisions** - Container Apps pulls new images
-5. **Traffic switch** - Gradual or instant
-
-## Cost Considerations
-
-### Pricing Components
-
-1. **Container Apps**:
-   - Compute (vCPU-seconds)
-   - Memory (GiB-seconds)
-   - Requests (first 2M free)
-
-2. **Event Grid**:
-   - Operations (publish, deliver)
-   - Storage (minimal)
-
-3. **Storage Account**:
-   - Blob storage (GiB-month)
-   - Operations (reads, writes)
-
-4. **Log Analytics**:
-   - Data ingestion (GiB)
-   - Data retention
-
-5. **Application Insights**:
-   - Telemetry ingestion
-
-6. **Container Registry**:
-   - Storage (GiB-month)
-   - Basic tier
-
-### Cost Optimization
-
-- **Scale to zero** - Can configure min replicas = 0
-- **Right-size resources** - Adjust CPU/memory allocation
-- **Log retention** - Reduce retention period
-- **Sampling** - Application Insights sampling
-- **Image optimization** - Smaller images = faster pulls
-- **Private Endpoints** - Minimal cost (~$7.30/month per endpoint)
-
-## Limitations & Considerations
-
-1. **Event Grid**:
-   - Max message size: 1 MB
-   - Delivery order: Not guaranteed
-   - Exactly-once delivery: Not guaranteed (at-least-once)
-
-2. **Blob State Store**:
-   - Not optimized for high-frequency updates
-   - Eventually consistent
-   - Consider Cosmos DB for stronger consistency
-
-3. **Autoscaling**:
-   - Scale-down has cooldown period
-   - Minimum 1 replica for availability
-   - Cold starts when scaling from zero
-
-4. **Container Apps**:
-   - Max 30 replicas per app (can be increased)
-   - Max 2 vCPU, 4 GiB per container (consumption plan)
-
-## Future Enhancements
-
-1. **Custom Domain** - Custom DNS names
-2. **API Management** - API gateway integration
-3. **Cosmos DB** - Enhanced state store with stronger consistency
-4. **Service Bus** - Alternative to Event Grid
-5. **Key Vault** - Application-specific secrets management
-6. **GitHub Actions** - CI/CD pipeline
-7. **WAF** - Web Application Firewall integration
-8. **DDoS Protection** - Standard tier for enhanced protection
-
----
-
-**Last Updated**: December 22, 2025  
-**Version**: 2.0 (Security Enhanced)
+See [README.md](../README.md) for deployment instructions.

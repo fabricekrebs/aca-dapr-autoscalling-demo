@@ -62,13 +62,14 @@ The demo consists of two microservices:
 
 ### Network Architecture
 
-- **Virtual Network**: `vnet-italynorth-daprdemo-01` (10.0.0.0/16)
-  - Container Apps Subnet: `10.0.0.0/23` (512 addresses)
-  - Private Endpoints Subnet: `10.0.2.0/24` (256 addresses)
+- **Virtual Network**: `vnet-italynorth-daprdemo-01` (10.12.2.0/24)
+  - Container Apps Subnet: `10.12.2.0/25` (128 addresses)
+  - Private Endpoints Subnet: `10.12.2.128/25` (128 addresses)
 - **Private DNS Zones**: 
   - `privatelink.blob.core.windows.net`
   - `privatelink.azurecr.io`
   - `privatelink.eventgrid.azure.net`
+  - `privatelink.servicebus.windows.net`
 
 ### KEDA Autoscaling Configuration
 
@@ -76,12 +77,12 @@ Worker service autoscaling:
 - **Min Replicas**: 0 (scales to zero when no messages)
 - **Max Replicas**: 30
 - **Trigger**: Azure Service Bus topic subscription
-- **Target**: 100 messages per replica
+- **Target**: 5 messages per replica
 - **Polling Interval**: 2 seconds
 - **Cooldown Period**: 10 seconds
 - **Authentication**: Workload Identity (system)
 
-**Example**: 10,000 messages in queue = 100 replicas needed, capped at 30 max
+**Example**: 150 messages in queue = 30 replicas (capped at max)
 
 ## 📁 Project Structure
 

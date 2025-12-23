@@ -9,7 +9,7 @@ param serviceBusPrivateDnsZoneId string
 param tags object = {}
 
 // Service Bus Namespace
-resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
+resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2024-01-01' = {
   name: serviceBusNamespaceName
   location: location
   tags: tags
@@ -26,7 +26,7 @@ resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2022-10-01-preview
 }
 
 // Service Bus Topic
-resource topic 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
+resource topic 'Microsoft.ServiceBus/namespaces/topics@2024-01-01' = {
   parent: serviceBusNamespace
   name: topicName
   properties: {
@@ -41,7 +41,7 @@ resource topic 'Microsoft.ServiceBus/namespaces/topics@2022-10-01-preview' = {
 }
 
 // Private Endpoint for Service Bus
-resource serviceBusPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = {
+resource serviceBusPrivateEndpoint 'Microsoft.Network/privateEndpoints@2025-01-01' = {
   name: '${serviceBusNamespaceName}-pe'
   location: location
   tags: tags
@@ -64,7 +64,7 @@ resource serviceBusPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-0
 }
 
 // Private DNS Zone Group for Service Bus
-resource serviceBusPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-05-01' = {
+resource serviceBusPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2025-01-01' = {
   parent: serviceBusPrivateEndpoint
   name: 'servicebus-dns-zone-group'
   properties: {

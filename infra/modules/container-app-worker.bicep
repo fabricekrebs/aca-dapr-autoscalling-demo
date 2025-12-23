@@ -8,7 +8,6 @@ param containerImage string
 param containerPort int
 param containerRegistryServer string
 param managedIdentityId string
-param managedIdentityClientId string
 param daprAppId string
 param daprAppPort int
 param minReplicas int = 0
@@ -22,7 +21,7 @@ param serviceBusTopicName string
 param serviceBusSubscriptionName string = 'worker'  // Dapr creates a subscription with the app's daprAppId
 param messageCountTarget int = 100  // Target number of messages per replica
 
-resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
+resource containerApp 'Microsoft.App/containerApps@2025-07-01' = {
   name: appName
   location: location
   tags: tags

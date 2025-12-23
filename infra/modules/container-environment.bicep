@@ -8,16 +8,15 @@ param workspaceId string
 param workspaceSharedKey string
 @secure()
 param appInsightsConnectionString string
+@secure()
 param appInsightsInstrumentationKey string
 param containerAppsSubnetId string
 param storageAccountName string
-param serviceBusEndpoint string
 param serviceBusNamespaceName string
-param topicName string
 param managedIdentityClientId string
 param tags object = {}
 
-resource environment 'Microsoft.App/managedEnvironments@2023-05-01' = {
+resource environment 'Microsoft.App/managedEnvironments@2025-07-01' = {
   name: environmentName
   location: location
   tags: tags
@@ -40,7 +39,7 @@ resource environment 'Microsoft.App/managedEnvironments@2023-05-01' = {
 }
 
 // Dapr Component: Azure Service Bus Topics for Pub/Sub with Managed Identity
-resource daprPubSubComponent 'Microsoft.App/managedEnvironments/daprComponents@2023-05-01' = {
+resource daprPubSubComponent 'Microsoft.App/managedEnvironments/daprComponents@2025-07-01' = {
   parent: environment
   name: 'pubsub'
   properties: {
@@ -65,7 +64,7 @@ resource daprPubSubComponent 'Microsoft.App/managedEnvironments/daprComponents@2
 }
 
 // Dapr Component: State Store (Azure Blob Storage) with Managed Identity
-resource daprStateStoreComponent 'Microsoft.App/managedEnvironments/daprComponents@2023-05-01' = {
+resource daprStateStoreComponent 'Microsoft.App/managedEnvironments/daprComponents@2025-07-01' = {
   parent: environment
   name: 'statestore'
   properties: {

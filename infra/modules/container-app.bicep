@@ -17,7 +17,7 @@ param memory string = '1Gi'
 param tags object = {}
 param environmentVariables array = []
 
-resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
+resource containerApp 'Microsoft.App/containerApps@2025-07-01' = {
   name: appName
   location: location
   tags: tags

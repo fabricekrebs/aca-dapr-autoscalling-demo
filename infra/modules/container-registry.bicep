@@ -7,7 +7,7 @@ param privateEndpointsSubnetId string
 param acrPrivateDnsZoneId string
 param tags object = {}
 
-resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2025-11-01' = {
   name: registryName
   location: location
   tags: tags
@@ -35,7 +35,7 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' =
 }
 
 // Private Endpoint for Container Registry
-resource acrPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = {
+resource acrPrivateEndpoint 'Microsoft.Network/privateEndpoints@2025-01-01' = {
   name: '${registryName}-pe'
   location: location
   tags: tags
@@ -58,7 +58,7 @@ resource acrPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = {
 }
 
 // Private DNS Zone Group for ACR
-resource acrPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-05-01' = {
+resource acrPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2025-01-01' = {
   parent: acrPrivateEndpoint
   name: 'acr-dns-zone-group'
   properties: {

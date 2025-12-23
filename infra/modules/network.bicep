@@ -11,7 +11,7 @@ var containerAppsSubnetPrefix = '10.0.0.0/23'
 var privateEndpointsSubnetPrefix = '10.0.2.0/24'
 
 // Virtual Network
-resource vnet 'Microsoft.Network/virtualNetworks@2023-05-01' = {
+resource vnet 'Microsoft.Network/virtualNetworks@2025-01-01' = {
   name: vnetName
   location: location
   tags: tags
@@ -44,14 +44,14 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-05-01' = {
 }
 
 // Private DNS Zone for Blob Storage
-resource blobPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+resource blobPrivateDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = {
   name: 'privatelink.blob.${environment().suffixes.storage}'
   location: 'global'
   tags: tags
 }
 
 // Link Blob DNS Zone to VNET
-resource blobDnsZoneLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+resource blobDnsZoneLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = {
   parent: blobPrivateDnsZone
   name: '${vnetName}-blob-link'
   location: 'global'
@@ -64,14 +64,14 @@ resource blobDnsZoneLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@
 }
 
 // Private DNS Zone for Container Registry
-resource acrPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+resource acrPrivateDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = {
   name: 'privatelink.azurecr.io'
   location: 'global'
   tags: tags
 }
 
 // Link ACR DNS Zone to VNET
-resource acrDnsZoneLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+resource acrDnsZoneLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = {
   parent: acrPrivateDnsZone
   name: '${vnetName}-acr-link'
   location: 'global'
@@ -84,14 +84,14 @@ resource acrDnsZoneLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2
 }
 
 // Private DNS Zone for Service Bus
-resource serviceBusPrivateDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+resource serviceBusPrivateDnsZone 'Microsoft.Network/privateDnsZones@2024-06-01' = {
   name: 'privatelink.servicebus.windows.net'
   location: 'global'
   tags: tags
 }
 
 // Link Service Bus DNS Zone to VNET
-resource serviceBusDnsZoneLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+resource serviceBusDnsZoneLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2024-06-01' = {
   parent: serviceBusPrivateDnsZone
   name: '${vnetName}-servicebus-link'
   location: 'global'

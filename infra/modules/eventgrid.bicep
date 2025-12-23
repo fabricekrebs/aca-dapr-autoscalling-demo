@@ -9,7 +9,7 @@ param eventGridPrivateDnsZoneId string
 param tags object = {}
 
 // Event Grid Namespace
-resource eventGridNamespace 'Microsoft.EventGrid/namespaces@2023-12-15-preview' = {
+resource eventGridNamespace 'Microsoft.EventGrid/namespaces@2025-02-15' = {
   name: eventGridNamespaceName
   location: location
   tags: tags
@@ -24,7 +24,7 @@ resource eventGridNamespace 'Microsoft.EventGrid/namespaces@2023-12-15-preview' 
 }
 
 // Event Grid Topic
-resource topic 'Microsoft.EventGrid/namespaces/topics@2023-12-15-preview' = {
+resource topic 'Microsoft.EventGrid/namespaces/topics@2025-02-15' = {
   parent: eventGridNamespace
   name: topicName
   properties: {
@@ -35,7 +35,7 @@ resource topic 'Microsoft.EventGrid/namespaces/topics@2023-12-15-preview' = {
 }
 
 // Event Grid Topic Subscription
-resource subscription 'Microsoft.EventGrid/namespaces/topics/eventSubscriptions@2023-12-15-preview' = {
+resource subscription 'Microsoft.EventGrid/namespaces/topics/eventSubscriptions@2025-02-15' = {
   parent: topic
   name: '${topicName}-subscription'
   properties: {
@@ -52,7 +52,7 @@ resource subscription 'Microsoft.EventGrid/namespaces/topics/eventSubscriptions@
 }
 
 // Private Endpoint for Event Grid
-resource eventGridPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = {
+resource eventGridPrivateEndpoint 'Microsoft.Network/privateEndpoints@2025-01-01' = {
   name: '${eventGridNamespaceName}-pe'
   location: location
   tags: tags
@@ -75,7 +75,7 @@ resource eventGridPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01
 }
 
 // Private DNS Zone Group for Event Grid
-resource eventGridPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-05-01' = {
+resource eventGridPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2025-01-01' = {
   parent: eventGridPrivateEndpoint
   name: 'eventgrid-dns-zone-group'
   properties: {

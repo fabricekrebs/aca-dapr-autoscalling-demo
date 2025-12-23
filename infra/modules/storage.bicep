@@ -7,7 +7,7 @@ param privateEndpointsSubnetId string
 param blobPrivateDnsZoneId string
 param tags object = {}
 
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
+resource storageAccount 'Microsoft.Storage/storageAccounts@2025-06-01' = {
   name: storageAccountName
   location: location
   tags: tags
@@ -40,7 +40,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
 }
 
 // Blob service
-resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2025-06-01' = {
   parent: storageAccount
   name: 'default'
   properties: {
@@ -52,7 +52,7 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01'
 }
 
 // Container for Dapr state
-resource stateContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+resource stateContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2025-06-01' = {
   parent: blobService
   name: 'dapr-state'
   properties: {
@@ -61,7 +61,7 @@ resource stateContainer 'Microsoft.Storage/storageAccounts/blobServices/containe
 }
 
 // Private Endpoint for Blob Storage
-resource blobPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = {
+resource blobPrivateEndpoint 'Microsoft.Network/privateEndpoints@2025-01-01' = {
   name: '${storageAccountName}-blob-pe'
   location: location
   tags: tags
@@ -84,7 +84,7 @@ resource blobPrivateEndpoint 'Microsoft.Network/privateEndpoints@2023-05-01' = {
 }
 
 // Private DNS Zone Group for Blob
-resource blobPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-05-01' = {
+resource blobPrivateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2025-01-01' = {
   parent: blobPrivateEndpoint
   name: 'blob-dns-zone-group'
   properties: {
