@@ -171,7 +171,7 @@ module workerApp 'modules/container-app-worker.bicep' = {
     managedIdentityId: managedIdentity.outputs.identityId
     daprAppId: 'worker'
     daprAppPort: 8081
-    minReplicas: 0
+    minReplicas: 1
     maxReplicas: 30
     cpu: '0.5'
     memory: '1Gi'

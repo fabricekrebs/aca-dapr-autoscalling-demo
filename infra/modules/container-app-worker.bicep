@@ -17,12 +17,9 @@ param memory string = '1Gi'
 param tags object = {}
 param environmentVariables array = []
 param serviceBusNamespaceName string
-param serviceBusNamespaceId string
 param serviceBusTopicName string
 param serviceBusSubscriptionName string = 'worker'  // Dapr creates a subscription with the app's daprAppId
 param messageCountTarget int = 100  // Target number of messages per replica
-param serviceBusDataReceiverRoleId string
-param monitoringReaderRoleId string
 
 resource containerApp 'Microsoft.App/containerApps@2025-07-01' = {
   name: appName
@@ -82,8 +79,8 @@ resource containerApp 'Microsoft.App/containerApps@2025-07-01' = {
                 port: containerPort
                 scheme: 'HTTP'
               }
-              initialDelaySeconds: 5
-              periodSeconds: 5
+              initialDelaySeconds: 15
+              periodSeconds: 10
               failureThreshold: 3
             }
           ]
@@ -92,8 +89,8 @@ resource containerApp 'Microsoft.App/containerApps@2025-07-01' = {
       scale: {
         minReplicas: minReplicas
         maxReplicas: maxReplicas
-        pollingInterval: 2
-        cooldownPeriod: 10
+        pollingInterval: 5
+        cooldownPeriod: 300
         rules: [
           {
             name: 'azure-servicebus-topic-rule'
