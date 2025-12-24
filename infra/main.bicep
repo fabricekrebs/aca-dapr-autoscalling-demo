@@ -179,7 +179,7 @@ module workerApp 'modules/container-app-worker.bicep' = {
     serviceBusNamespaceName: serviceBusNamespaceName
     serviceBusTopicName: 'orders'
     serviceBusSubscriptionName: 'worker'
-    messageCountTarget: 5
+    messageCountTarget: 100
     environmentVariables: [
       {
         name: 'PORT'
